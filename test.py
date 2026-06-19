@@ -1,2 +1,2 @@
 def hello():
-    print("hello from PR bot demo")
+    print("hello from PR botdemo demo")
