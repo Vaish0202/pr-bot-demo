@@ -1,0 +1,393 @@
+{
+  "name": "PR Summariser - Workflow 1",
+  "nodes": [
+    {
+      "parameters": {
+        "owner": {
+          "__rl": true,
+          "value": "Vaish0202",
+          "mode": "name"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "pr-bot-demo",
+          "mode": "name"
+        },
+        "events": [
+          "pull_request"
+        ],
+        "options": {
+          "insecureSSL": false
+        }
+      },
+      "type": "n8n-nodes-base.githubTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "83e1c2d2-d490-4afb-ac32-961b8ef6e0bc",
+      "name": "On PR Opened",
+      "webhookId": "c30ab0f4-3491-4132-83f6-4bf420fcad8f",
+      "credentials": {
+        "githubApi": {
+          "id": "4hIHEJ3TOROkbiOM",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $json.body.pull_request.base.repo.owner.login }}/{{ $json.body.pull_request.base.repo.name }}/pulls/{{ $json.body.pull_request.number }}/files",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_GITHUB_TOKEN"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        432,
+        0
+      ],
+      "id": "735fa5a1-017a-4361-a953-10101be56961",
+      "name": "Fetch PR Files"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "14adfb25-93e1-4e9e-8aaf-75c24b82c82a",
+              "name": "filename",
+              "value": "={{ $json.filename}}",
+              "type": "string"
+            },
+            {
+              "id": "269cf426-6a18-4256-8785-fe8648f6a076",
+              "name": "patch",
+              "value": "={{ $json.patch }}",
+              "type": "string"
+            },
+            {
+              "id": "b8fb5068-b566-45e3-8945-571aab9bcf1c",
+              "name": "additions",
+              "value": "={{ $json.additions }}",
+              "type": "string"
+            },
+            {
+              "id": "147945b7-b77a-44a6-9e86-9e117fbd6a72",
+              "name": "deletions",
+              "value": "={{ $json.deletions }}",
+              "type": "string"
+            },
+            {
+              "id": "33acf28e-b613-4584-b6a0-e3b2f79a0f41",
+              "name": "pr_title",
+              "value": "={{ $('On PR Opened').item.json.body.pull_request.title }}",
+              "type": "string"
+            },
+            {
+              "id": "1b42895d-afb7-4584-a4da-f4e1f6069d0c",
+              "name": "pr_author",
+              "value": "={{ $('On PR Opened').item.json.body.pull_request.user.login }}",
+              "type": "string"
+            },
+            {
+              "id": "29d98808-a7f5-44c0-b1b7-eb6339129098",
+              "name": "pr_number",
+              "value": "={{ $('On PR Opened').item.json.body.pull_request.number }}",
+              "type": "string"
+            },
+            {
+              "id": "d7041d0d-9e5e-4167-b8ca-234dddcd3bc8",
+              "name": "pr_body",
+              "value": "={{ $('On PR Opened').item.json.body.pull_request.body }}",
+              "type": "string"
+            },
+            {
+              "id": "14dd6c6a-867e-4680-a3f8-69a09a545b6d",
+              "name": "repo_name",
+              "value": "={{ $('On PR Opened').item.json.body.pull_request.base.repo.name }}",
+              "type": "string"
+            },
+            {
+              "id": "e64dade1-0bc9-4367-a796-1b7df5b388d5",
+              "name": "repo_owner",
+              "value": "={{ $('On PR Opened').item.json.body.pull_request.base.repo.owner.login }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        656,
+        0
+      ],
+      "id": "dec07cc8-8f99-4a56-b1be-ecd8d272b08f",
+      "name": "Extract Fields"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nlet diffString = \"\";\nlet truncated = false;\nconst MAX_CHARS = 6000;\n\nfor (const item of items) {\n  const filename = item.json.filename || \"unknown file\";\n  const patch = item.json.patch || \"(binary or empty file — no diff available)\";\n  const block = `File: ${filename}\\n${patch}\\n\\n`;\n\n  if ((diffString + block).length > MAX_CHARS) {\n    truncated = true;\n    break;\n  }\n\n  diffString += block;\n}\n\nif (truncated) {\n  diffString += `\\n[Note: diff truncated — some files not shown due to size limits]`;\n}\n\nconst first = items[0].json;\n\nreturn [{\n  json: {\n    diff_string: diffString,\n    pr_title: first.pr_title,\n    pr_author: first.pr_author,\n    pr_number: first.pr_number,\n    pr_body: first.pr_body || \"No description provided\",\n    repo_name: first.repo_name,\n    repo_owner: first.repo_owner,\n    truncated: truncated\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "id": "7cb102e8-e0ab-4a9e-90ce-89ae9b20f466",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_OPENROUTER_KEY
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "https://n8n.io"
+            },
+            {
+              "name": "X-Title",
+              "value": "PR Bot"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.request_body }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1296,
+        0
+      ],
+      "id": "6ce99c84-75ce-464b-b296-035828aab0bd",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nconst prompt = `Review this PR and return ONLY valid JSON, no markdown fences.\n\nPR Title: ${data.pr_title}\nAuthor: ${data.pr_author}\n\nChanged files:\n${data.diff_string}\n\nReturn exactly:\n{\"summary\":\"2-3 sentence summary\",\"key_changes\":[\"change 1\"],\"concerns\":[],\"complexity\":\"low or medium or high\",\"suggestion\":\"one improvement\"}`;\n\nreturn [{\n  json: {\n    ...data,\n    request_body: JSON.stringify({\n      model: \"openai/gpt-oss-20b:free\",\n      max_tokens: 500,\n      messages: [{ role: \"user\", content: prompt }]\n    })\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1088,
+        0
+      ],
+      "id": "f09384d9-ba41-46bb-981a-8a4a6274489d",
+      "name": "Build Request Body"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\n\n// Extract content from OpenRouter response\nlet text = response.choices[0].message.content;\n\n// Strip markdown fences just in case\ntext = text.replace(/```json|```/g, '').trim();\n\n// Parse the review JSON\nlet review;\ntry {\n  review = JSON.parse(text);\n} catch (e) {\n  review = {\n    summary: \"Could not parse AI response\",\n    key_changes: [],\n    concerns: [],\n    complexity: \"unknown\",\n    suggestion: text\n  };\n}\n\n// Complexity emoji\nconst complexityEmoji = {\n  low: \"🟢\",\n  medium: \"🟡\", \n  high: \"🔴\",\n  unknown: \"⚪\"\n};\n\n// Build markdown comment\nconst emoji = complexityEmoji[review.complexity] || \"⚪\";\n\nconst keyChanges = review.key_changes.length > 0\n  ? review.key_changes.map(c => `- ${c}`).join(\"\\n\")\n  : \"- No major changes detected\";\n\nconst concerns = review.concerns.length > 0\n  ? review.concerns.map(c => `- ⚠️ ${c}`).join(\"\\n\")\n  : \"- ✅ No concerns found\";\n\nconst comment = `## 🤖 AI Code Review\n\n**Summary**\n${review.summary}\n\n**Key Changes**\n${keyChanges}\n\n**Concerns**\n${concerns}\n\n**Complexity:** ${emoji} ${review.complexity}\n\n**Suggestion**\n💡 ${review.suggestion}\n\n---\n*Reviewed automatically by PR Bot · Powered by n8n + OpenRouter*`;\n\n// Pass forward with PR metadata\nconst upstream = $('Build Request Body').first().json;\n\nreturn [{\n  json: {\n    comment,\n    pr_number: upstream.pr_number,\n    repo_name: upstream.repo_name,\n    repo_owner: upstream.repo_owner\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1504,
+        0
+      ],
+      "id": "189bb554-bb77-4cb1-acc3-3791b36571ba",
+      "name": "Format PR comment"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.github.com/repos/{{ $json.repo_owner }}/{{ $json.repo_name }}/issues/{{ $json.pr_number }}/comments",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_GITHUB_TOKEN"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ body: $json.comment }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1712,
+        0
+      ],
+      "id": "a63a57e0-2dba-4440-8219-8a8ae45e227b",
+      "name": "Post GitHub Comment"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "1b491aa7-2280-4689-8e90-ff2381dea574",
+              "leftValue": "={{ $json.body.pull_request.draft }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        208,
+        0
+      ],
+      "id": "0873d1f9-0ad0-4f69-9f54-78049716bacc",
+      "name": "If"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "On PR Opened": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch PR Files": {
+      "main": [
+        [
+          {
+            "node": "Extract Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Fields": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Build Request Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Request Body": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Format PR comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format PR comment": {
+      "main": [
+        [
+          {
+            "node": "Post GitHub Comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Fetch PR Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "9d8975b2-e1f1-4d12-b11c-9a423b7fcc40",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "34961daef55c9fbbd85e83c102cb3160a7f2854fd004622d0e926aa411618453"
+  },
+  "nodeGroups": [],
+  "id": "DITonQN843EaXBLL",
+  "tags": []
+}

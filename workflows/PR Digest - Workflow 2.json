@@ -1,0 +1,247 @@
+{
+  "name": "PR Digest - Workflow 2",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtHour": 21
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -80,
+        16
+      ],
+      "id": "1281b288-ff97-46da-a44d-d8d5049819ea",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        240
+      ],
+      "id": "9f1ef17d-3e3f-4c99-b1bb-f0d7abb9e881",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "url": "https://api.github.com/repos/Vaish0202/pr-bot-demo/pulls?state=all&sort=updated&direction=desc&per_page=50",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_GITHUB_TOKEN"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        144,
+        16
+      ],
+      "id": "5e11fd18-2e78-4dbc-8d12-95c7d09d9086",
+      "name": "Fetch Weekly PRs"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst now = new Date();\nconst sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);\n\n// Filter PRs updated in last 7 days\nconst weekPRs = items.filter(item => {\n  const updated = new Date(item.json.updated_at);\n  return updated >= sevenDaysAgo;\n});\n\nif (weekPRs.length === 0) {\n  return [{\n    json: {\n      no_prs: true,\n      message: \"No PRs this week\",\n      stats: {}\n    }\n  }];\n}\n\n// Compute stats\nconst totalPRs = weekPRs.length;\nconst totalAdditions = weekPRs.reduce((sum, p) => sum + (p.json.additions || 0), 0);\nconst totalDeletions = weekPRs.reduce((sum, p) => sum + (p.json.deletions || 0), 0);\nconst totalFiles = weekPRs.reduce((sum, p) => sum + (p.json.changed_files || 0), 0);\n\n// Most active author\nconst authorCount = {};\nweekPRs.forEach(p => {\n  const author = p.json.user?.login || \"unknown\";\n  authorCount[author] = (authorCount[author] || 0) + 1;\n});\nconst topAuthor = Object.entries(authorCount).sort((a, b) => b[1] - a[1])[0][0];\n\n// PR titles list\nconst prList = weekPRs.map(p => `- #${p.json.number}: ${p.json.title} by ${p.json.user?.login}`).join(\"\\n\");\n\nreturn [{\n  json: {\n    no_prs: false,\n    total_prs: totalPRs,\n    total_additions: totalAdditions,\n    total_deletions: totalDeletions,\n    total_files_changed: totalFiles,\n    top_author: topAuthor,\n    pr_list: prList,\n    week_start: sevenDaysAgo.toDateString(),\n    week_end: now.toDateString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        368,
+        16
+      ],
+      "id": "a2892c83-c4d2-4997-b7e4-ff81da3e351e",
+      "name": "Compute Weekly Stats"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_OPENROUTER_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "https://n8n.io"
+            },
+            {
+              "name": "X-Title",
+              "value": "PR Bot"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.request_body }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        816,
+        16
+      ],
+      "id": "b0c900e8-223b-4e3c-9aa0-61b73cf54a02",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "const stats = $input.first().json;\n\nconst prompt = `You are a tech lead writing a weekly code health digest for your team.\n\nHere are this week's stats:\n- Total PRs: ${stats.total_prs}\n- Lines added: ${stats.total_additions}\n- Lines deleted: ${stats.total_deletions}\n- Files changed: ${stats.total_files_changed}\n- Most active contributor: ${stats.top_author}\n- Week: ${stats.week_start} to ${stats.week_end}\n\nPRs this week:\n${stats.pr_list}\n\nWrite a concise, insightful digest in 3 short paragraphs. Be direct, no fluff. Max 150 words.`;\n\nreturn [{\n  json: {\n    ...stats,\n    request_body: JSON.stringify({\n      model: \"openai/gpt-oss-20b:free\",\n      max_tokens: 300,\n      messages: [{ role: \"user\", content: prompt }]\n    })\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        592,
+        16
+      ],
+      "id": "c029022a-a560-4afb-bd41-881cda89ca71",
+      "name": "Call OpenRouter Digest"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst narrative = response.choices[0].message.content;\nconst stats = $('Compute Weekly Stats').first().json;\n\nconst html = `\n<h2>📊 Weekly PR Digest</h2>\n<p><strong>Week:</strong> ${stats.week_start} → ${stats.week_end}</p>\n\n<table border=\"1\" cellpadding=\"8\" cellspacing=\"0\" style=\"border-collapse:collapse;\">\n  <tr><td><strong>Total PRs</strong></td><td>${stats.total_prs}</td></tr>\n  <tr><td><strong>Lines Added</strong></td><td>+${stats.total_additions}</td></tr>\n  <tr><td><strong>Lines Deleted</strong></td><td>-${stats.total_deletions}</td></tr>\n  <tr><td><strong>Files Changed</strong></td><td>${stats.total_files_changed}</td></tr>\n  <tr><td><strong>Top Contributor</strong></td><td>${stats.top_author}</td></tr>\n</table>\n\n<h3>🤖 AI Summary</h3>\n<blockquote>${narrative.replace(/\\n/g, '<br>')}</blockquote>\n\n<h3>📋 PRs This Week</h3>\n<pre>${stats.pr_list}</pre>\n\n<hr>\n<small>Generated automatically by PR Bot · n8n + OpenRouter</small>\n`;\n\nreturn [{ json: { html, subject: `Weekly PR Digest — ${stats.week_end}` } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        16
+      ],
+      "id": "eb06e127-3bf9-483e-ba8d-492a2fc16ff4",
+      "name": "Format Digest Email"
+    },
+    {
+      "parameters": {
+        "sendTo": "YOUR_EMAIL",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.html }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1264,
+        16
+      ],
+      "id": "99689e69-2eeb-4710-8487-08c25a39a9d1",
+      "name": "Send a message",
+      "webhookId": "f62bf08e-85c3-41ad-913b-e96a3e173d2b",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "2m2dwdw6JuLMNDOW",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Weekly PRs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Weekly PRs": {
+      "main": [
+        [
+          {
+            "node": "Compute Weekly Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Weekly Stats": {
+      "main": [
+        [
+          {
+            "node": "Call OpenRouter Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call OpenRouter Digest": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Format Digest Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Digest Email": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "81cad321-8d70-49c5-b1b0-64bfb4e81f0c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "34961daef55c9fbbd85e83c102cb3160a7f2854fd004622d0e926aa411618453"
+  },
+  "nodeGroups": [],
+  "id": "RIRI2qpsO0HkDInQ",
+  "tags": []
+}
